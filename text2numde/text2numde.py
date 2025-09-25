@@ -1,6 +1,5 @@
-# Inspired by Greg Hewgill (https://github.com/ghewgill/text2num)
-
 import re
+from typing import List
 
 Units = {
     'null': 0,
@@ -31,26 +30,23 @@ Units = {
     'sechzig': 60,
     'siebzig': 70,
     'achtzig': 80,
-    'neunzig': 90
-}
-
-Hundred = {
-    "hundert": 100
+    'neunzig': 90,
+    'hundert': 100
 }
 
 Magnitude = {
-    "tausend":     1_000,
-    "million":     1_000_000,
-    "millionen":   1_000_000,
-    "milliarde":   1_000_000_000,
-    "milliarden":  1_000_000_000,
-    "billion":     1_000_000_000_000,
-    "billionen":   1_000_000_000_000,
-    "billiarde":   1_000_000_000_000_000,
-    "billiarden":  1_000_000_000_000_000,
-    "trillion":    1_000_000_000_000_000_000,
-    "trillionen":  1_000_000_000_000_000_000,
-    "trilliarde":  1_000_000_000_000_000_000_000,
+    "tausend": 1_000,
+    "million": 1_000_000,
+    "millionen": 1_000_000,
+    "milliarde": 1_000_000_000,
+    "milliarden": 1_000_000_000,
+    "billion": 1_000_000_000_000,
+    "billionen": 1_000_000_000_000,
+    "billiarde": 1_000_000_000_000_000,
+    "billiarden": 1_000_000_000_000_000,
+    "trillion": 1_000_000_000_000_000_000,
+    "trillionen": 1_000_000_000_000_000_000,
+    "trilliarde": 1_000_000_000_000_000_000_000,
     "trilliarden": 1_000_000_000_000_000_000_000
 }
 
@@ -63,12 +59,11 @@ Sign = {
     "minus": '-'
 }
 
-All_Numbers = list(Units.keys()) + list(Magnitude.keys()) + list(Hundred.keys()) + list(Komma.keys()) + list(["und"])
+All_Numbers = list(Units.keys()) + list(Magnitude.keys()) + list(Komma.keys()) + list(["und"])
 
 class NumberException(Exception):
     def __init__(self, msg):
         Exception.__init__(self, msg)
-
 
 def is_number(word):
     try:
@@ -77,14 +72,14 @@ def is_number(word):
         return False
     return True
 
-def sentence2num(s, signed = False):
+def sentence2num(s, signed=False):
     sentences = re.split(r"\s*[\.,;\(\)…\[\]:!\?]+\s*", s)
     punctuations = re.findall(r"\s*[\.,;\(\)…\[\]:!\?]+\s*", s)
-    
+
     if len(punctuations) < len(sentences):
         punctuations.append("")
-    
-    out_segments: List[str] = []    
+
+    out_segments: List[str] = []
     for segment, sep in zip(sentences, punctuations):
         tokens = segment.split()
         sentence = []
@@ -97,7 +92,6 @@ def sentence2num(s, signed = False):
             t = tokens[token_index]
 
             if t.lower() in Komma:
-                # Behandle Komma
                 if sentence:
                     try:
                         num_result = text2num(" ".join(sentence))
@@ -144,11 +138,10 @@ def sentence2num(s, signed = False):
 
             token_index += 1
 
-        # Zusammenfügen der Tokens ohne Leerzeichen um Kommas
         out_segment = ""
         for index, ot in enumerate(out_tokens):
             if ot in Komma.values():
-                out_segment = out_segment.rstrip() + ot  # Entferne Leerzeichen vor dem Komma
+                out_segment = out_segment.rstrip() + ot
             elif (ot in Sign) and signed:
                 if index < len(out_tokens) - 1:
                     if out_tokens_is_num[index + 1] == True:
@@ -162,31 +155,24 @@ def sentence2num(s, signed = False):
     return "".join(out_segments)
 
 def __split_ger__(word):
-    """Splits number words into separate words, e.g. einhundertfünzig-> ein hundert fünfzig"""
-    
-    # Sort all numbers by length to start with the longest 
+    """Splits number words into separate words, e.g. einhundertfünzig -> ein hundert fünfzig"""
     sorted_words = sorted(All_Numbers, key=len, reverse=True)
-    
-    current_word = ""
     text = word.lower()
-    invalid_word = ""
     result = []
     while len(text) > 0:
-        # start with the longest
         found = False
         for sw in sorted_words:
-            # Check at the beginning of the current sentence for the longest word in ALL_WORDS
             if text.startswith(sw):
                 if not sw == "und":
                     result.append(sw)
                 text = text[len(sw):]
                 text = text.strip()
-                found = True 
+                found = True
                 break
         if not found:
-            raise NumberException("Can't split, unknown number: '"+word+"'")
+            raise NumberException("Can't split, unknown number: '" + word + "'")
     return " ".join(result)
-    
+
 def text2num(s):
     words = __split_ger__(s)
     b = re.split(r"komma", words)
@@ -196,27 +182,32 @@ def text2num(s):
     for w in a:
         x = Units.get(w, None)
         if x is not None:
-            g += x
-        elif w == "hundert" and g != 0:
-            g *= 100
+            if x == 100:  # Behandle "hundert"
+                if g == 0:
+                    g = 1
+                g *= x
+            else:
+                g += x
         else:
             x = Magnitude.get(w, None)
             if x is not None:
                 n += g * x
                 g = 0
             else:
-                raise NumberException("Unknown number: "+w)
+                raise NumberException("Unknown number: " + w)
     res = n + g
 
-    # floating point number
+    # Floating point number
     if len(b) == 2:
         ak = "0."
-        a = re.split(r"[\s-]+", b[1].strip())
+        # Split the decimal part using __split_ger__ to handle compound words
+        decimal_words = __split_ger__(b[1].strip())
+        a = re.split(r"[\s-]+", decimal_words)
         for w in a:
             x = Units.get(w, None)
-            if x is not None:
+            if x is not None and x < 10:  # Nur Ziffern 0-9 erlauben
                 ak += str(x)
             else:
-                raise NumberException("Unknown number: " + w)
+                raise NumberException("Invalid decimal number: " + w)
         res += eval(ak)
     return res
